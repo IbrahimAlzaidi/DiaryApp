@@ -30,10 +30,8 @@ fun HomeContent(
         LazyColumn(
             modifier = Modifier
                 .padding(horizontal = 24.dp)
+                .navigationBarsPadding()
                 .padding(top = paddingValues.calculateTopPadding())
-                .padding(bottom = paddingValues.calculateBottomPadding())
-                .padding(start = paddingValues.calculateStartPadding(LayoutDirection.Ltr))
-                .padding(end = paddingValues.calculateEndPadding(LayoutDirection.Ltr))
         ) {
             diaryNotes.forEach { (LocalDate, diaries) ->
                 stickyHeader(key = LocalDate) {

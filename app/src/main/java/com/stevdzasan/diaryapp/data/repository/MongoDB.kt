@@ -11,6 +11,7 @@ import io.realm.kotlin.log.LogLevel
 import io.realm.kotlin.mongodb.App
 import io.realm.kotlin.mongodb.sync.SyncConfiguration
 import io.realm.kotlin.query.Sort
+import io.realm.kotlin.types.ObjectId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -64,6 +65,77 @@ object MongoDB : MongoRepository {
             }
         } else {
             flow { emit(RequestState.Error(UserNotAuthenticatedException())) }
+        }
+    }
+
+    override fun getSelectedDiary(diaryId: ObjectId): Flow<RequestState<Diary>> {
+        return if (user != null) {
+            try {
+                realm.query<Diary>(query = "_id ==$0", diaryId).asFlow().map {
+                    RequestState.Success(data = it.list.first())
+                }
+            } catch (e: Exception) {
+                flow { emit(RequestState.Error(e)) }
+            }
+        } else {
+            flow { emit(RequestState.Error(UserNotAuthenticatedException())) }
+        }
+    }
+
+    override suspend fun insertDiary(diary: Diary): RequestState<Diary> {
+        return if (user != null) {
+            realm.write {
+                try {
+                    val addedDiary = copyToRealm(diary.apply { ownerId = user.identity })
+                    RequestState.Success(data = addedDiary)
+                } catch (e: Exception) {
+                    RequestState.Error(e)
+                }
+            }
+        } else {
+            RequestState.Error(UserNotAuthenticatedException())
+        }
+    }
+
+    override suspend fun updateDiary(diary: Diary): RequestState<Diary> {
+        return if (user != null) {
+            realm.write {
+                val queriedDiary = query<Diary>(query = "_id ==$0", diary._id).first().find()
+                if (queriedDiary != null) {
+                    queriedDiary.title = diary.title
+                    queriedDiary.description = diary.description
+                    queriedDiary.mood = diary.mood
+                    queriedDiary.images = diary.images
+                    queriedDiary.date = diary.date
+                    RequestState.Success(data = queriedDiary)
+                } else {
+                    RequestState.Error(error = Exception("Queried Diary Does not exist."))
+                }
+            }
+        } else {
+            RequestState.Error(UserNotAuthenticatedException())
+        }
+    }
+
+    override suspend fun deleteDiary(id: ObjectId): RequestState<Diary> {
+        return if (user != null) {
+            realm.write {
+                val diary =
+                    query<Diary>(query = "_id == $0 and ownerId == $1", id, user.identity).first()
+                        .find()
+                if (diary != null) {
+                    try {
+                        delete(diary)
+                        RequestState.Success(data = diary)
+                    } catch (e: Exception) {
+                        RequestState.Error(e)
+                    }
+                } else {
+                    RequestState.Error(Exception("Diary does not exist."))
+                }
+            }
+        } else {
+            RequestState.Error(UserNotAuthenticatedException())
         }
     }
 }
