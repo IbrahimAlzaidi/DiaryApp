@@ -2,12 +2,14 @@
 
 package com.stevdzasan.diaryapp.navigation
 
-import android.util.Log
+import android.os.Build
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -17,7 +19,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.rememberPagerState
-import com.stevdzasan.diaryapp.data.repository.MongoDB
 import com.stevdzasan.diaryapp.model.Mood
 import com.stevdzasan.diaryapp.presentation.components.DisplayAlertDialog
 import com.stevdzasan.diaryapp.presentation.screens.authentication.AuthenticationScreen
@@ -26,8 +27,8 @@ import com.stevdzasan.diaryapp.presentation.screens.home.HomeScreen
 import com.stevdzasan.diaryapp.presentation.screens.home.HomeViewModel
 import com.stevdzasan.diaryapp.presentation.screens.write.WriteScreen
 import com.stevdzasan.diaryapp.presentation.screens.write.WriteViewModel
-import com.stevdzasan.diaryapp.util.Constants
 import com.stevdzasan.diaryapp.util.Constants.APP_ID
+import com.stevdzasan.diaryapp.util.Constants.WRITE_SCREEN_ARGUMENT_KEY
 import com.stevdzasan.diaryapp.util.RequestState
 import com.stevdzasan.messagebar.rememberMessageBarState
 import com.stevdzasan.onetap.rememberOneTapSignInState
@@ -36,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@RequiresApi(Build.VERSION_CODES.N)
 @Composable
 fun SetupNavGraph(
     startDestination: String,
@@ -66,11 +68,14 @@ fun SetupNavGraph(
             },
             onDataLoaded = onDataLoaded
         )
-        writeRoute(onBackPressed = {
-            navController.popBackStack()
-        })
+        writeRoute(
+            navigateBack = {
+                navController.popBackStack()
+            }
+        )
     }
 }
+
 
 fun NavGraphBuilder.authenticationRoute(
     navigateToHome: () -> Unit,
@@ -78,8 +83,8 @@ fun NavGraphBuilder.authenticationRoute(
 ) {
     composable(route = Screen.Authentication.route) {
         val viewModel: AuthenticationViewModel = viewModel()
-        val loadingState by viewModel.loadingState
         val authenticated by viewModel.authenticated
+        val loadingState by viewModel.loadingState
         val oneTapState = rememberOneTapSignInState()
         val messageBarState = rememberMessageBarState()
 
@@ -96,8 +101,7 @@ fun NavGraphBuilder.authenticationRoute(
                 oneTapState.open()
                 viewModel.setLoading(true)
             },
-            onTokenIdReceived = { tokenId ->
-
+            onSuccessfulFirebaseSignIn = { tokenId ->
                 viewModel.signInWithMongoAtlas(
                     tokenId = tokenId,
                     onSuccess = {
@@ -110,6 +114,10 @@ fun NavGraphBuilder.authenticationRoute(
                     }
                 )
             },
+            onFailedFirebaseSignIn = {
+                messageBarState.addError(it)
+                viewModel.setLoading(false)
+            },
             onDialogDismissed = { message ->
                 messageBarState.addError(Exception(message))
                 viewModel.setLoading(false)
@@ -119,6 +127,7 @@ fun NavGraphBuilder.authenticationRoute(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.N)
 fun NavGraphBuilder.homeRoute(
     navigateToWrite: () -> Unit,
     navigateToWriteWithArgs: (String) -> Unit,
@@ -126,17 +135,20 @@ fun NavGraphBuilder.homeRoute(
     onDataLoaded: () -> Unit
 ) {
     composable(route = Screen.Home.route) {
-        val viewModel: HomeViewModel = viewModel()
+        val viewModel: HomeViewModel = hiltViewModel()
         val diaries by viewModel.diaries
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
         val scope = rememberCoroutineScope()
+        val context = LocalContext.current
         var signOutDialogOpened by remember { mutableStateOf(false) }
+        var deleteAllDialogOpened by remember { mutableStateOf(false) }
+
         LaunchedEffect(key1 = diaries) {
             if (diaries !is RequestState.Loading) {
                 onDataLoaded()
             }
         }
-        Log.d("Home Route", "$diaries")
+
         HomeScreen(
             diaries = diaries,
             drawerState = drawerState,
@@ -145,18 +157,18 @@ fun NavGraphBuilder.homeRoute(
                     drawerState.open()
                 }
             },
-            onSignOutClicked = {
-                signOutDialogOpened = true
-            },
+            dateIsSelected = viewModel.dateIsSelected,
+            onDateSelected = { viewModel.getDiaries(zonedDateTime = it) },
+            onDateReset = { viewModel.getDiaries() },
+            onSignOutClicked = { signOutDialogOpened = true },
+            onDeleteAllClicked = { deleteAllDialogOpened = true },
             navigateToWrite = navigateToWrite,
             navigateToWriteWithArgs = navigateToWriteWithArgs
         )
-        LaunchedEffect(key1 = Unit) {
-            MongoDB.configureTheRealm()
-        }
+
         DisplayAlertDialog(
             title = "Sign Out",
-            message = "Are You sure to sign out?",
+            message = "Are you sure you want to Sign Out from your Google Account?",
             dialogOpened = signOutDialogOpened,
             onDialogClosed = { signOutDialogOpened = false },
             onYesClicked = {
@@ -171,51 +183,105 @@ fun NavGraphBuilder.homeRoute(
                 }
             }
         )
+
+        DisplayAlertDialog(
+            title = "Delete All Diaries",
+            message = "Are you sure you want to permanently delete all your diaries?",
+            dialogOpened = deleteAllDialogOpened,
+            onDialogClosed = { deleteAllDialogOpened = false },
+            onYesClicked = {
+                viewModel.deleteAllDiaries(
+                    onSuccess = {
+                        Toast.makeText(
+                            context,
+                            "All Diaries Deleted.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        scope.launch {
+                            drawerState.close()
+                        }
+                    },
+                    onError = {
+                        Toast.makeText(
+                            context,
+                            if (it.message == "No Internet Connection.")
+                                "We need an Internet Connection for this operation."
+                            else it.message,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        scope.launch {
+                            drawerState.close()
+                        }
+                    }
+                )
+            }
+        )
     }
 }
 
-fun NavGraphBuilder.writeRoute(onBackPressed: () -> Unit) {
-
+@OptIn(ExperimentalPagerApi::class)
+fun NavGraphBuilder.writeRoute(navigateBack: () -> Unit) {
     composable(
         route = Screen.Write.route,
-        arguments = listOf(navArgument(name = Constants.WRITE_SCREEN_ARGUMENT_KEY) {
+        arguments = listOf(navArgument(name = WRITE_SCREEN_ARGUMENT_KEY) {
             type = NavType.StringType
             nullable = true
             defaultValue = null
         })
     ) {
-        val viewModel: WriteViewModel = viewModel()
+        val viewModel: WriteViewModel = hiltViewModel()
         val context = LocalContext.current
         val uiState = viewModel.uiState
+        val galleryState = viewModel.galleryState
         val pagerState = rememberPagerState()
-        val pageNumber by remember {
-            derivedStateOf { pagerState.currentPage }
-        }
+        val pageNumber by remember { derivedStateOf { pagerState.currentPage } }
 
         WriteScreen(
             uiState = uiState,
-            moodName = { Mood.values()[pageNumber].name },
             pagerState = pagerState,
+            galleryState = galleryState,
+            moodName = { Mood.values()[pageNumber].name },
             onTitleChanged = { viewModel.setTitle(title = it) },
             onDescriptionChanged = { viewModel.setDescription(description = it) },
-            onDeleteConfirmed = { viewModel.deleteDiary(
-                onSuccess = {
-                Toast.makeText(context,"Deleted",Toast.LENGTH_SHORT).show()
-                    onBackPressed()
-                },
-                onError = {message ->
-                    Toast.makeText(context,message,Toast.LENGTH_SHORT).show()
-                }
-            )},
             onDateTimeUpdated = { viewModel.updateDateTime(zonedDateTime = it) },
-            onBackPressed = onBackPressed,
-            onSaveClicked = {
-                viewModel.upsertDiary(diary = it.apply { mood = Mood.values()[pageNumber].name },
-                    onSuccess = { onBackPressed()},
-                    onError = {message ->
-                        Toast.makeText(context,message,Toast.LENGTH_SHORT).show()}
+            onBackPressed = navigateBack,
+            onDeleteConfirmed = {
+                viewModel.deleteDiary(
+                    onSuccess = {
+                        Toast.makeText(
+                            context,
+                            "Deleted",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        navigateBack()
+                    },
+                    onError = { message ->
+                        Toast.makeText(
+                            context,
+                            message,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 )
-            }
+            },
+            onSaveClicked = {
+                viewModel.upsertDiary(
+                    diary = it.apply { mood = Mood.values()[pageNumber].name },
+                    onSuccess = navigateBack,
+                    onError = { message ->
+                        Toast.makeText(
+                            context,
+                            message,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+            },
+            onImageSelect = {
+                val type = context.contentResolver.getType(it)?.split("/")?.last() ?: "jpg"
+                viewModel.addImage(image = it, imageType = type)
+            },
+            onImageDeleteClicked = { galleryState.removeImage(it) }
         )
     }
 }

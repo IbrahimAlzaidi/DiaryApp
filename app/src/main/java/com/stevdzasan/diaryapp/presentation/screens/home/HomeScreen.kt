@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.stevdzasan.diaryapp.data.repository.Diaries
 import com.stevdzasan.diaryapp.util.RequestState
 import com.stevdzasan.diaryapp.R
+import java.time.ZonedDateTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -25,7 +27,11 @@ fun HomeScreen(
     diaries: Diaries,
     drawerState: DrawerState,
     onMenuClicked: () -> Unit,
+    dateIsSelected: Boolean,
+    onDateSelected: (ZonedDateTime) -> Unit,
+    onDateReset: () -> Unit,
     onSignOutClicked: () -> Unit,
+    onDeleteAllClicked: () -> Unit,
     navigateToWrite: () -> Unit,
     navigateToWriteWithArgs: (String) -> Unit
 ) {
@@ -33,19 +39,25 @@ fun HomeScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     NavigationDrawer(
         drawerState = drawerState,
-        onSignOutClicked = onSignOutClicked
+        onSignOutClicked = onSignOutClicked,
+        onDeleteAllClicked = onDeleteAllClicked
     ) {
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 HomeTopBar(
                     scrollBehavior = scrollBehavior,
-                    onMenuClicked = onMenuClicked
+                    onMenuClicked = onMenuClicked,
+                    dateIsSelected = dateIsSelected,
+                    onDateSelected = onDateSelected,
+                    onDateReset = onDateReset
                 )
             },
             floatingActionButton = {
                 FloatingActionButton(
-                    modifier = Modifier.padding(end = padding.calculateEndPadding(LayoutDirection.Ltr)),
+                    modifier = Modifier.padding(
+                        end = padding.calculateEndPadding(LayoutDirection.Ltr)
+                    ),
                     onClick = navigateToWrite
                 ) {
                     Icon(
@@ -58,7 +70,6 @@ fun HomeScreen(
                 padding = it
                 when (diaries) {
                     is RequestState.Success -> {
-                        Log.d("HomeScreen", "${diaries.data}")
                         HomeContent(
                             paddingValues = it,
                             diaryNotes = diaries.data,
@@ -66,7 +77,6 @@ fun HomeScreen(
                         )
                     }
                     is RequestState.Error -> {
-                        Log.d("HomeScreenError", "${diaries.error.message}")
                         EmptyPage(
                             title = "Error",
                             subtitle = "${diaries.error.message}"
@@ -82,7 +92,6 @@ fun HomeScreen(
                     }
                     else -> {}
                 }
-
             }
         )
     }
@@ -92,42 +101,60 @@ fun HomeScreen(
 fun NavigationDrawer(
     drawerState: DrawerState,
     onSignOutClicked: () -> Unit,
+    onDeleteAllClicked: () -> Unit,
     content: @Composable () -> Unit
 ) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(content = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+            ModalDrawerSheet(
+                content = {
                     Image(
-                        modifier = Modifier.size(250.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(250.dp),
                         painter = painterResource(id = R.drawable.logo),
-                        contentDescription = "Logo"
+                        contentDescription = "Logo Image"
+                    )
+                    NavigationDrawerItem(
+                        label = {
+                            Row(modifier = Modifier.padding(horizontal = 12.dp)) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.google_logo),
+                                    contentDescription = "Google Logo",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Sign Out",
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        selected = false,
+                        onClick = onSignOutClicked
+                    )
+                    NavigationDrawerItem(
+                        label = {
+                            Row(modifier = Modifier.padding(horizontal = 12.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete All Icon",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Delete All Diaries",
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        },
+                        selected = false,
+                        onClick = onDeleteAllClicked
                     )
                 }
-                NavigationDrawerItem(
-                    label = {
-                        Row(modifier = Modifier.padding(horizontal = 12.dp)) {
-                            Image(
-                                painter = painterResource(id = R.drawable.google_logo),
-                                contentDescription = "Google Logo"
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = "Sign Out", color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    },
-                    selected = false,
-                    onClick = onSignOutClicked
-                )
-            })
+            )
         },
         content = content
     )
-
-
 }

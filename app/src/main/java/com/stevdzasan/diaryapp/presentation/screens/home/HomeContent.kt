@@ -32,19 +32,16 @@ fun HomeContent(
                 .navigationBarsPadding()
                 .padding(top = paddingValues.calculateTopPadding())
         ) {
-            diaryNotes.forEach { (LocalDate, diaries) ->
-                stickyHeader(key = LocalDate) {
-                    DateHeader(localDate = LocalDate)
+            diaryNotes.forEach { (localDate, diaries) ->
+                stickyHeader(key = localDate) {
+                    DateHeader(localDate = localDate)
                 }
+
                 items(
                     items = diaries,
-                    key = {
-                        it._id.toString()
-                    }) {
-                    DiaryHolder(
-                        diary = it,
-                        onClick = onClick
-                    )
+                    key = { it._id.toString() }
+                ) {
+                    DiaryHolder(diary = it, onClick = onClick)
                 }
             }
         }
@@ -64,7 +61,7 @@ fun DateHeader(localDate: LocalDate) {
     ) {
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = String().format("%02d", localDate.dayOfMonth),
+                text = String.format("%02d", localDate.dayOfMonth),
                 style = TextStyle(
                     fontSize = MaterialTheme.typography.titleLarge.fontSize,
                     fontWeight = FontWeight.Light
@@ -81,15 +78,16 @@ fun DateHeader(localDate: LocalDate) {
         Spacer(modifier = Modifier.width(14.dp))
         Column(horizontalAlignment = Alignment.Start) {
             Text(
-                text = localDate.month.toString().lowercase().replaceFirstChar { it.titlecase() },
+                text = localDate.month.toString().lowercase()
+                    .replaceFirstChar { it.titlecase() },
                 style = TextStyle(
                     fontSize = MaterialTheme.typography.titleLarge.fontSize,
                     fontWeight = FontWeight.Light
                 )
             )
             Text(
-                text = localDate.year.toString(),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                text = "${localDate.year}",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                 style = TextStyle(
                     fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.Light

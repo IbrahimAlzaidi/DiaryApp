@@ -2,6 +2,7 @@
 
 package com.stevdzasan.diaryapp.presentation.screens.write
 
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -26,7 +27,11 @@ import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.PagerState
 import com.stevdzasan.diaryapp.model.Diary
+import com.stevdzasan.diaryapp.model.GalleryImage
+import com.stevdzasan.diaryapp.model.GalleryState
 import com.stevdzasan.diaryapp.model.Mood
+import com.stevdzasan.diaryapp.presentation.components.GalleryUploader
+import io.realm.kotlin.ext.toRealmList
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,19 +39,22 @@ import kotlinx.coroutines.launch
 fun WriteContent(
     uiState: UiState,
     pagerState: PagerState,
+    galleryState: GalleryState,
     title: String,
     onTitleChanged: (String) -> Unit,
     description: String,
     onDescriptionChanged: (String) -> Unit,
     paddingValues: PaddingValues,
-    onSaveClicked: (Diary) -> Unit
+    onSaveClicked: (Diary) -> Unit,
+    onImageSelect: (Uri) -> Unit,
+    onImageClicked: (GalleryImage) -> Unit
 ) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(key1 = scrollState.maxValue){
+    LaunchedEffect(key1 = scrollState.maxValue) {
         scrollState.scrollTo(scrollState.maxValue)
     }
 
@@ -130,15 +138,14 @@ fun WriteContent(
             )
         }
 
-
         Column(verticalArrangement = Arrangement.Bottom) {
             Spacer(modifier = Modifier.height(12.dp))
-//            GalleryUploader(
-//                galleryState = galleryState,
-//                onAddClicked = { focusManager.clearFocus() },
-//                onImageSelect = onImageSelect,
-//                onImageClicked = onImageClicked
-//            )
+            GalleryUploader(
+                galleryState = galleryState,
+                onAddClicked = { focusManager.clearFocus() },
+                onImageSelect = onImageSelect,
+                onImageClicked = onImageClicked
+            )
             Spacer(modifier = Modifier.height(12.dp))
             Button(
                 modifier = Modifier
@@ -150,9 +157,9 @@ fun WriteContent(
                             Diary().apply {
                                 this.title = uiState.title
                                 this.description = uiState.description
+                                this.images = galleryState.images.map { it.remoteImagePath }.toRealmList()
                             }
                         )
-                        Log.d("SavedClicked", "Good...")
                     } else {
                         Toast.makeText(
                             context,
